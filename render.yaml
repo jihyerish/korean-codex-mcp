@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: korean-law-mcp
+    env: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: LAW_API_OC
+        sync: false
+      - key: MCP_AUTH_TOKEN
+        sync: false
+      - key: LAW_API_BASE_URL
+        value: https://www.law.go.kr/DRF
+      - key: LAW_API_TIMEOUT_SECONDS
+        value: "20"
+      - key: FASTMCP_STATELESS_HTTP
+        value: "true"
+
