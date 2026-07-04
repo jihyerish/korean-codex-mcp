@@ -2,7 +2,7 @@
 
 국가법령정보 공동활용(Open Law API)을 이용해 사용자의 법령/규제 질문에 필요한 근거 조문을 찾아 주는 FastMCP 서버입니다. Render에 바로 배포할 수 있도록 `render.yaml`, `Procfile`, `Dockerfile`을 함께 넣어 두었습니다.
 
-공식 가이드 기준으로 목록 조회는 `lawSearch.do`, 본문 조회는 `lawService.do` 흐름을 사용합니다. MCP 엔드포인트는 `/mcp/`, 상태 확인은 `/health`입니다.
+공식 가이드 기준으로 목록 조회는 `lawSearch.do`, 본문 조회는 `lawService.do` 흐름을 사용합니다. MCP 엔드포인트는 `/mcp`, 상태 확인은 `/health`입니다.
 
 ## 제공 도구
 
@@ -19,8 +19,10 @@
 Open Law API 신청 후 받은 OC 코드를 환경변수로 넣습니다.
 
 ```bash
-LAW_API_OC=신청한_OC_코드
+LAW_OPEN_API_OC=신청한_OC_코드
 ```
+
+기존 이름인 `LAW_API_OC`도 호환됩니다.
 
 원격 MCP 서버를 공개 URL에 올릴 때는 `MCP_AUTH_TOKEN`도 설정하는 것을 권장합니다.
 
@@ -33,13 +35,13 @@ MCP_AUTH_TOKEN=원하는_긴_토큰
 ## 2. 로컬 실행
 
 ```bash
-python -m venv .venv
+python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env
 ```
 
-`.env` 파일에 `LAW_API_OC` 값을 넣은 뒤 실행합니다.
+`.env` 파일에 `LAW_OPEN_API_OC` 값을 넣은 뒤 실행합니다.
 
 ```bash
 uvicorn app:app --host 0.0.0.0 --port 8000
@@ -54,7 +56,7 @@ curl http://localhost:8000/health
 MCP URL:
 
 ```text
-http://localhost:8000/mcp/
+http://localhost:8000/mcp
 ```
 
 ## 3. Render 배포
@@ -66,7 +68,7 @@ http://localhost:8000/mcp/
 필수 환경변수:
 
 ```text
-LAW_API_OC=신청한_OC_코드
+LAW_OPEN_API_OC=신청한_OC_코드
 ```
 
 권장 환경변수:
@@ -84,7 +86,7 @@ https://<render-service-name>.onrender.com/health
 MCP 접속 URL:
 
 ```text
-https://<render-service-name>.onrender.com/mcp/
+https://<render-service-name>.onrender.com/mcp
 ```
 
 ## 4. MCP 클라이언트 연결 예시
@@ -95,7 +97,7 @@ https://<render-service-name>.onrender.com/mcp/
 {
   "mcpServers": {
     "korean-law": {
-      "url": "https://<render-service-name>.onrender.com/mcp/",
+      "url": "https://<render-service-name>.onrender.com/mcp",
       "headers": {
         "Authorization": "Bearer <MCP_AUTH_TOKEN>"
       }
@@ -126,7 +128,8 @@ MCP 클라이언트에서 다음처럼 물어볼 수 있습니다.
 
 | 이름 | 필수 | 기본값 | 설명 |
 | --- | --- | --- | --- |
-| `LAW_API_OC` | 예 | 없음 | Open Law API 신청 후 받은 OC 코드 |
+| `LAW_OPEN_API_OC` | 예 | 없음 | Open Law API 신청 후 받은 OC 코드 |
+| `LAW_API_OC` | 아니오 | 없음 | 이전 이름입니다. `LAW_OPEN_API_OC`가 없을 때만 사용됩니다. |
 | `LAW_API_BASE_URL` | 아니오 | `https://www.law.go.kr/DRF` | Open Law API 기본 주소 |
 | `LAW_API_TIMEOUT_SECONDS` | 아니오 | `20` | API 요청 제한 시간 |
 | `MCP_AUTH_TOKEN` | 아니오 | 없음 | 원격 MCP 접속 보호용 Bearer 토큰 |
@@ -137,4 +140,3 @@ MCP 클라이언트에서 다음처럼 물어볼 수 있습니다.
 - [국가법령정보 공동활용 OPEN API 활용가이드](https://open.law.go.kr/LSO/openApi/guideList.do)
 - [국가법령정보 공동활용 OPEN API 활용방법](https://open.law.go.kr/LSO/openApi/openApiManual.do)
 - [FastMCP HTTP Deployment](https://gofastmcp.com/deployment/http)
-

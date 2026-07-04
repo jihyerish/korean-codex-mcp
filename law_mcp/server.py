@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import Annotated, Any, Literal
 
 from fastmcp import FastMCP
@@ -36,6 +37,18 @@ TARGET_NAMES: dict[str, str] = {
     "ordin": "자치법규",
 }
 
+DOCUMENT_TITLE_PATTERN = re.compile(
+    r"([가-힣A-Za-z0-9·ㆍ ]{2,50}?"
+    r"(?:시행규칙|시행령|특별법|기본법|법률|규칙|규정|조례|고시|지침|법|령))"
+)
+
+
+def extract_document_query(text: str) -> str | None:
+    match = DOCUMENT_TITLE_PATTERN.search(text)
+    if not match:
+        return None
+    return re.sub(r"\s+", " ", match.group(1)).strip()
+
 
 def create_mcp() -> FastMCP:
     settings = get_settings()
@@ -63,6 +76,7 @@ def create_mcp() -> FastMCP:
                 "status": "ok",
                 "service": "korean-law-mcp",
                 "law_api_configured": bool(current_settings.law_api_oc),
+                "law_api_env_name": current_settings.law_api_oc_env_name,
             }
         )
 
@@ -152,7 +166,7 @@ def create_mcp() -> FastMCP:
         max_articles: int = 6,
     ) -> dict[str, Any]:
         client = KoreanLawClient()
-        query = law_name or question_or_keywords
+        query = law_name or extract_document_query(question_or_keywords) or question_or_keywords
         found: list[dict[str, Any]] = []
         errors: list[str] = []
 

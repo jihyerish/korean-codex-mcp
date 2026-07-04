@@ -8,7 +8,7 @@ services:
     healthCheckPath: /health
     autoDeploy: true
     envVars:
-      - key: LAW_API_OC
+      - key: LAW_OPEN_API_OC
         sync: false
       - key: MCP_AUTH_TOKEN
         sync: false
@@ -18,4 +18,3 @@ services:
         value: "20"
       - key: FASTMCP_STATELESS_HTTP
         value: "true"
-

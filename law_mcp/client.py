@@ -20,7 +20,8 @@ class KoreanLawClient:
     def _require_oc(self) -> str:
         if not self.settings.law_api_oc:
             raise LawApiError(
-                "LAW_API_OC is not set. Add your Open Law API OC code as an environment variable."
+                "LAW_OPEN_API_OC is not set. Add your Open Law API OC code as an environment variable. "
+                "LAW_API_OC is also supported for backward compatibility."
             )
         return self.settings.law_api_oc
 
@@ -58,6 +59,15 @@ class KoreanLawClient:
             raise LawApiError("Open Law API response could not be parsed as an XML document.")
         return parsed
 
+    @staticmethod
+    def _xml_error_message(parsed: dict[str, Any]) -> str | None:
+        if len(parsed) != 1:
+            return None
+        body = next(iter(parsed.values()))
+        if isinstance(body, str) and body.strip():
+            return body.strip()
+        return None
+
     async def search_documents(
         self,
         query: str,
@@ -82,6 +92,31 @@ class KoreanLawClient:
         document_key: str,
         key_type: str = "mst",
     ) -> dict[str, Any]:
+        attempts: list[tuple[str, str]] = [(target, key_type)]
+        if target == "eflaw" and key_type.lower() == "mst":
+            attempts.append(("law", "mst"))
+        if target == "admrul" and key_type.lower() == "mst":
+            attempts.append(("admrul", "id"))
+
+        last_error: str | None = None
+        for attempt_target, attempt_key_type in attempts:
+            try:
+                return await self._get_document_detail_once(
+                    target=attempt_target,
+                    document_key=document_key,
+                    key_type=attempt_key_type,
+                )
+            except LawApiError as exc:
+                last_error = str(exc)
+
+        raise LawApiError(last_error or "Open Law API detail lookup failed.")
+
+    async def _get_document_detail_once(
+        self,
+        target: str,
+        document_key: str,
+        key_type: str = "mst",
+    ) -> dict[str, Any]:
         params: dict[str, Any] = {"target": target}
         if key_type.lower() == "id":
             params["ID"] = document_key
@@ -89,6 +124,9 @@ class KoreanLawClient:
             params["MST"] = document_key
 
         parsed = await self._get_xml("lawService.do", params)
+        error_message = self._xml_error_message(parsed)
+        if error_message:
+            raise LawApiError(error_message)
         return normalize_detail_response(parsed, target=target)
 
     async def raw_call(

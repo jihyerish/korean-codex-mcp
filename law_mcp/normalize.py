@@ -23,6 +23,7 @@ DETAIL_TARGET_LABELS = {
 
 TEXT_KEYS = {
     "조문내용",
+    "조내용",
     "항내용",
     "호내용",
     "목내용",
@@ -33,7 +34,7 @@ TEXT_KEYS = {
     "이유내용",
 }
 
-ARTICLE_MARKER_KEYS = {"조문번호", "조문가지번호", "조문제목", "조문내용"}
+ARTICLE_MARKER_KEYS = {"조문번호", "조문가지번호", "조문제목", "조문내용", "조제목", "조내용"}
 
 
 def ensure_list(value: Any) -> list[Any]:
@@ -123,7 +124,21 @@ def extract_search_items(body: dict[str, Any], target: str) -> list[dict[str, An
     return []
 
 
-def normalize_search_item(item: dict[str, Any]) -> dict[str, Any]:
+def detail_lookup_key(target: str, mst: str | None, document_id: str | None) -> tuple[str | None, str | None]:
+    if target == "eflaw" and document_id:
+        return document_id, "id"
+    if target == "admrul" and mst:
+        return mst, "id"
+    if target == "ordin" and mst:
+        return mst, "mst"
+    if mst:
+        return mst, "mst"
+    if document_id:
+        return document_id, "id"
+    return None, None
+
+
+def normalize_search_item(item: dict[str, Any], target: str) -> dict[str, Any]:
     detail_link = first_value(
         item,
         [
@@ -166,13 +181,14 @@ def normalize_search_item(item: dict[str, Any]) -> dict[str, Any]:
             "id",
         ],
     )
+    document_key, key_type = detail_lookup_key(target, mst, document_id)
 
     return {
         "title": title,
         "mst": mst,
         "id": document_id,
-        "document_key": mst or document_id,
-        "key_type": "mst" if mst else "id" if document_id else None,
+        "document_key": document_key,
+        "key_type": key_type,
         "type": first_value(item, ["법령구분명", "행정규칙종류명", "자치법규종류명"]),
         "ministry": first_value(item, ["소관부처명", "소관부처", "소관기관명"]),
         "promulgation_date": compact_date(first_value(item, ["공포일자", "발령일자"])),
@@ -191,7 +207,7 @@ def normalize_search_response(
     limit: int,
 ) -> dict[str, Any]:
     root_name, body = extract_root(parsed_xml)
-    items = [normalize_search_item(item) for item in extract_search_items(body, target)]
+    items = [normalize_search_item(item, target) for item in extract_search_items(body, target)]
     total = first_value(body, ["totalCnt", "totalCount", "total", "전체건수"])
 
     return {
@@ -219,7 +235,11 @@ def collect_text_parts(node: Any, parts: list[str]) -> None:
             collect_text_parts(item, parts)
 
 
-def article_number(node: dict[str, Any]) -> str | None:
+def article_number(node: dict[str, Any], content: str = "") -> str | None:
+    content_match = re.search(r"제\s*\d+\s*조(?:의\s*\d+)?", content)
+    if content_match:
+        return re.sub(r"\s+", "", content_match.group(0))
+
     number = clean_text(node.get("조문번호"))
     branch = clean_text(node.get("조문가지번호"))
     if not number:
@@ -241,8 +261,8 @@ def normalize_article(node: dict[str, Any]) -> dict[str, Any]:
     parts: list[str] = []
     collect_text_parts(node, parts)
     content = "\n".join(dict.fromkeys(part for part in parts if part))
-    title = clean_text(node.get("조문제목"))
-    number = article_number(node)
+    title = clean_text(node.get("조문제목")) or clean_text(node.get("조제목"))
+    number = article_number(node, content)
     label = number or title or "article"
     if title and number:
         label = f"{number}({title})"
@@ -258,7 +278,9 @@ def normalize_article(node: dict[str, Any]) -> dict[str, Any]:
 
 def collect_articles(node: Any, articles: list[dict[str, Any]]) -> None:
     if isinstance(node, dict):
-        if ARTICLE_MARKER_KEYS.intersection(node.keys()) and clean_text(node.get("조문내용")):
+        if ARTICLE_MARKER_KEYS.intersection(node.keys()) and any(
+            clean_text(node.get(key)) for key in ("조문내용", "조내용")
+        ):
             normalized = normalize_article(node)
             if normalized["content"]:
                 articles.append(normalized)
@@ -314,6 +336,7 @@ def normalize_detail_response(parsed_xml: dict[str, Any], target: str) -> dict[s
 
 def score_text(query: str, text: str) -> int:
     normalized_text = text.lower()
+    compact_text = re.sub(r"[\W_]+", "", normalized_text)
     terms = [term for term in re.split(r"\s+", query.lower()) if len(term) >= 2]
     if not terms:
         return 0
@@ -322,6 +345,14 @@ def score_text(query: str, text: str) -> int:
         if term in normalized_text:
             score += 5
         score += normalized_text.count(term)
+        compact_term = re.sub(r"[\W_]+", "", term)
+        for suffix in ("으로부터", "에서", "으로", "까지", "부터", "에게", "께서", "처럼", "보다", "하고", "이며", "이나", "거나", "인가", "은", "는", "이", "가", "을", "를", "에", "의", "상", "로", "와", "과", "도", "만"):
+            if len(compact_term) > len(suffix) + 1 and compact_term.endswith(suffix):
+                compact_term = compact_term[: -len(suffix)]
+                break
+        if compact_term and compact_term in compact_text:
+            score += 5
+            score += compact_text.count(compact_term)
     return score
 
 
@@ -359,4 +390,3 @@ def trim_article(article: dict[str, Any], max_chars: int = 1200) -> dict[str, An
         "effective_date": article.get("effective_date"),
         "content": content,
     }
-
